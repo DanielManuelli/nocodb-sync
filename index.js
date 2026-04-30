@@ -236,23 +236,28 @@ async function syncTable(entry) {
 
 // --- WEBHOOK ---
 
+// Legge un singolo record da Base A tramite ID
+async function getRecordFromA(tableIdA, recordId) {
+  return await apiFetch(`/api/v1/db/data/noco/${BASE_A_ID}/${tableIdA}/${recordId}`);
+}
+
 app.post("/webhook", async (req, res) => {
   try {
     const event = req.body;
     console.log("Webhook ricevuto:", JSON.stringify(event, null, 2));
 
-    // NocoDB può inviare i dati in strutture diverse a seconda della versione
-    const record = event?.data?.rows?.[0]
+    // Estrai il record dal payload (serve solo l ID)
+    const rawRecord = event?.data?.rows?.[0]
       || event?.data?.row
       || event?.row
       || event?.data?.[0];
 
-    if (!record || Object.keys(record).length === 0) {
-      console.warn("Record vuoto o mancante nel payload:", JSON.stringify(event));
+    if (!rawRecord?.Id) {
+      console.warn("ID record mancante nel payload:", JSON.stringify(event));
       return res.status(200).json({ message: "Nessun record da elaborare" });
     }
 
-    console.log("Record estratto:", JSON.stringify(record, null, 2));
+    console.log("Record estratto (raw):", JSON.stringify(rawRecord, null, 2));
 
     const tableIdA = event?.data?.table_id
       || event?.table_id
@@ -272,14 +277,20 @@ app.post("/webhook", async (req, res) => {
 
     const tableBId = await resolveTableB(entry);
 
-    const existing = await findInB(tableBId, String(record.Id));
+    // Controlla duplicati
+    const existing = await findInB(tableBId, String(rawRecord.Id));
     if (existing) {
-      console.log(`Record ${record.Id} già in B — nessuna azione`);
+      console.log(`Record ${rawRecord.Id} già in B — nessuna azione`);
       return res.status(200).json({ message: "Record già esistente in B, ignorato" });
     }
 
+    // Rileggi il record completo da A (il payload webhook può avere campi null)
+    await sleep(500); // piccola attesa per assicurarsi che A abbia salvato tutto
+    const record = await getRecordFromA(tableIdA, rawRecord.Id);
+    console.log("Record completo da A:", JSON.stringify(record, null, 2));
+
     const created = await createInB(tableBId, record);
-    console.log(`Record ${record.Id} creato in B con Id: ${created.Id}`);
+    console.log(`Record ${rawRecord.Id} creato in B con Id: ${created.Id}`);
     return res.status(200).json({ message: "Record creato in B", id: created.Id });
 
   } catch (err) {
