@@ -8,7 +8,7 @@ const BASE_A_ID = process.env.BASE_A_ID;
 const BASE_B_ID = process.env.BASE_B_ID;
 
 const headers = {
-  "xc-token": API_TOKEN,
+  "xc-auth": API_TOKEN,
   "Content-Type": "application/json",
 };
 
@@ -53,14 +53,24 @@ async function getFieldsA(tableIdA) {
 async function createTableInB(tableName, fieldsA) {
   console.log(`Creo tabella "${tableName}" in Base B...`);
 
-  // Filtra i campi interni di NocoDB e mappa al formato atteso
   const skipFields = new Set(["Id", "CreatedAt", "UpdatedAt", "nc_order"]);
+  const skipTypes = new Set(["LinkToAnotherRecord", "Lookup", "Rollup", "Formula"]);
+
   const columns = fieldsA
-    .filter(f => !skipFields.has(f.title) && f.uidt !== "LinkToAnotherRecord" && f.uidt !== "Lookup" && f.uidt !== "Rollup" && f.uidt !== "Formula")
-    .map(f => ({
-      title: f.title,
-      uidt: f.uidt || "SingleLineText",
-    }));
+    .filter(f => !skipFields.has(f.title) && !skipTypes.has(f.uidt))
+    .map(f => {
+      const col = {
+        title: f.title,
+        uidt: f.uidt || "SingleLineText",
+      };
+      // Copia le opzioni per campi SingleSelect e MultiSelect
+      if ((f.uidt === "SingleSelect" || f.uidt === "MultiSelect") && f.colOptions?.options) {
+        col.colOptions = {
+          options: f.colOptions.options.map(o => ({ title: o.title, color: o.color })),
+        };
+      }
+      return col;
+    });
 
   // Aggiungi campo RefID_A per tracciare l'origine
   columns.push({ title: "RefID_A", uidt: "SingleLineText" });
