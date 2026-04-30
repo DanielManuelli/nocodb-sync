@@ -116,7 +116,10 @@ function findTableEntry(tableIdA) {
   return TABLE_MAP.find(e => e.idA === tableIdA);
 }
 
-// Legge tutti i record di una tabella in A con paginazione
+// Attendi N millisecondi
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+// Legge tutti i record di una tabella in A con paginazione e delay anti-rate-limit
 async function getAllRecordsA(tableIdA) {
   const allRecords = [];
   let offset = 0;
@@ -129,6 +132,7 @@ async function getAllRecordsA(tableIdA) {
     allRecords.push(...records);
     if (records.length < limit) break;
     offset += limit;
+    await sleep(500); // pausa 500ms tra una pagina e l'altra
   }
   return allRecords;
 }
@@ -144,6 +148,7 @@ async function syncTable(entry) {
     if (existing) { skipped++; continue; }
     await createInB(tableBId, record);
     created++;
+    await sleep(300); // pausa 300ms tra un inserimento e l'altro
   }
   return { table: entry.nameA, total: records.length, created, skipped };
 }
