@@ -48,11 +48,17 @@ async function createTableInB(tableName, fieldsA) {
   console.log(`Creo tabella "${tableName}" in Base B...`);
 
   const skipFields = new Set(["Id", "CreatedAt", "UpdatedAt", "nc_order"]);
-  const skipTypes = new Set(["LinkToAnotherRecord", "Lookup", "Rollup", "Formula"]);
+  // LinkToAnotherRecord, Lookup e Rollup non sono replicabili cross-base
+  // Formula viene convertita in SingleLineText e il valore calcolato viene copiato
+  const skipTypes = new Set(["LinkToAnotherRecord", "Lookup", "Rollup"]);
 
   const columns = fieldsA
     .filter(f => !skipFields.has(f.title) && !skipTypes.has(f.uidt))
     .map(f => {
+      // I campi Formula vengono salvati come testo (il valore calcolato viene copiato dal record)
+      if (f.uidt === "Formula") {
+        return { title: f.title, uidt: "SingleLineText" };
+      }
       const col = {
         title: f.title,
         uidt: f.uidt || "SingleLineText",
@@ -103,9 +109,17 @@ async function findInB(tableBId, refValue) {
   return data?.list?.[0] || null;
 }
 
-async function createInB(tableBId, record) {
+async function createInB(tableBId, record, fieldsMetaA) {
   const { Id, CreatedAt, UpdatedAt, ...fields } = record;
-  const payload = { ...fields, RefID_A: String(Id) };
+
+  // Converti i valori dei campi Formula in stringa (sono salvati come SingleLineText in B)
+  const payload = { RefID_A: String(Id) };
+  for (const [key, value] of Object.entries(fields)) {
+    if (value === null || value === undefined) continue;
+    // Converti oggetti/array in stringa (es. valori formula complessi)
+    payload[key] = typeof value === "object" ? JSON.stringify(value) : String(value);
+  }
+
   return await apiFetch(`/api/v1/db/data/noco/${BASE_B_ID}/${tableBId}`, {
     method: "POST",
     body: JSON.stringify(payload),
