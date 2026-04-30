@@ -285,7 +285,7 @@ app.post("/webhook", async (req, res) => {
     }
 
     // Rileggi il record completo da A (il payload webhook può avere campi null)
-    await sleep(500); // piccola attesa per assicurarsi che A abbia salvato tutto
+    await sleep(60000); // attesa 60 secondi per assicurarsi che A abbia salvato tutto
     const record = await getRecordFromA(tableIdA, rawRecord.Id);
     console.log("Record completo da A:", JSON.stringify(record, null, 2));
 
