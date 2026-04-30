@@ -83,6 +83,45 @@ async function createTableInB(tableName, fieldsA) {
   return created.id;
 }
 
+// Aggiorna le opzioni di un campo Select in B aggiungendo quelle mancanti
+async function syncSelectOptions(tableBId, fieldB, optionsA) {
+  const existingTitles = new Set((fieldB.colOptions?.options || []).map(o => o.title));
+  const missing = optionsA.filter(o => !existingTitles.has(o.title));
+  if (missing.length === 0) return;
+
+  console.log(`  Aggiungo opzioni mancanti a "${fieldB.title}": ${missing.map(o => o.title).join(", ")}`);
+  const allOptions = [
+    ...(fieldB.colOptions?.options || []),
+    ...missing.map(o => ({ title: o.title, color: o.color })),
+  ];
+
+  await apiFetch(`/api/v1/db/meta/columns/${fieldB.id}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      title: fieldB.title,
+      uidt: fieldB.uidt,
+      colOptions: { options: allOptions },
+    }),
+  });
+}
+
+// Sincronizza i campi Select di una tabella esistente in B con quelli di A
+async function syncTableFields(tableBId, fieldsA) {
+  const dataB = await apiFetch(`/api/v1/db/meta/tables/${tableBId}`);
+  const fieldsB = dataB.columns || [];
+
+  for (const fA of fieldsA) {
+    if (fA.uidt !== "SingleSelect" && fA.uidt !== "MultiSelect") continue;
+    if (!fA.colOptions?.options?.length) continue;
+
+    const fB = fieldsB.find(f => f.title === fA.title);
+    if (!fB) continue;
+
+    await syncSelectOptions(tableBId, fB, fA.colOptions.options);
+    await sleep(200);
+  }
+}
+
 async function resolveTableB(entry) {
   if (tableBCache[entry.idA]) return tableBCache[entry.idA];
 
@@ -93,6 +132,9 @@ async function resolveTableB(entry) {
   if (existing) {
     console.log(`Tabella "${entry.nameA}" già presente in B: ${existing.id}`);
     tableBId = existing.id;
+    // Aggiorna le opzioni Select mancanti
+    const fieldsA = await getFieldsA(entry.idA);
+    await syncTableFields(tableBId, fieldsA);
   } else {
     const fieldsA = await getFieldsA(entry.idA);
     tableBId = await createTableInB(entry.nameA, fieldsA);
