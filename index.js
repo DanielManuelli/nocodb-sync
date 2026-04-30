@@ -241,13 +241,26 @@ app.post("/webhook", async (req, res) => {
     const event = req.body;
     console.log("Webhook ricevuto:", JSON.stringify(event, null, 2));
 
-    const record = event?.data?.rows?.[0];
-    if (!record) {
+    // NocoDB può inviare i dati in strutture diverse a seconda della versione
+    const record = event?.data?.rows?.[0]
+      || event?.data?.row
+      || event?.row
+      || event?.data?.[0];
+
+    if (!record || Object.keys(record).length === 0) {
+      console.warn("Record vuoto o mancante nel payload:", JSON.stringify(event));
       return res.status(200).json({ message: "Nessun record da elaborare" });
     }
 
-    const tableIdA = event?.data?.table_id || event?.table_id;
+    console.log("Record estratto:", JSON.stringify(record, null, 2));
+
+    const tableIdA = event?.data?.table_id
+      || event?.table_id
+      || event?.data?.tableId
+      || event?.tableId;
+    console.log("table_id estratto:", tableIdA);
     if (!tableIdA) {
+      console.warn("table_id mancante, payload completo:", JSON.stringify(event));
       return res.status(400).json({ error: "table_id mancante nel payload webhook" });
     }
 
