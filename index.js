@@ -137,15 +137,40 @@ async function getAllRecordsA(tableIdA) {
   return allRecords;
 }
 
+// Carica tutti i RefID_A già presenti in B in un Set (una sola scansione)
+async function getExistingRefIdsB(tableBId) {
+  const existing = new Set();
+  let offset = 0;
+  const limit = 100;
+  while (true) {
+    const data = await apiFetch(
+      `/api/v1/db/data/noco/${BASE_B_ID}/${tableBId}?fields=RefID_A&limit=${limit}&offset=${offset}`
+    );
+    const records = data?.list || [];
+    for (const r of records) {
+      if (r.RefID_A) existing.add(String(r.RefID_A));
+    }
+    if (records.length < limit) break;
+    offset += limit;
+    await sleep(500);
+  }
+  return existing;
+}
+
 // Sincronizza tutti i record di una tabella da A a B
 async function syncTable(entry) {
   const tableBId = await resolveTableB(entry);
+
+  // Carica in memoria i RefID già presenti in B (evita N chiamate di ricerca)
+  console.log(`  Carico RefID esistenti in B per "${entry.nameA}"...`);
+  const existingRefs = await getExistingRefIdsB(tableBId);
+  console.log(`  Trovati ${existingRefs.size} record già in B`);
+
   const records = await getAllRecordsA(entry.idA);
   let created = 0;
   let skipped = 0;
   for (const record of records) {
-    const existing = await findInB(tableBId, String(record.Id));
-    if (existing) { skipped++; continue; }
+    if (existingRefs.has(String(record.Id))) { skipped++; continue; }
     await createInB(tableBId, record);
     created++;
     await sleep(300); // pausa 300ms tra un inserimento e l'altro
