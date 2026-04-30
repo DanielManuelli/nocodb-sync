@@ -8,7 +8,7 @@ const BASE_A_ID = process.env.BASE_A_ID;
 const BASE_B_ID = process.env.BASE_B_ID;
 
 const headers = {
-  "xc-auth": API_TOKEN,
+  "xc-token": API_TOKEN,
   "Content-Type": "application/json",
 };
 
